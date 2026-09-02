@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Track Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #1e1e1e; color: white; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #444; font-size: 24px;}
+        .Z1 { background-color: #a0e6ff; color: black; font-weight: bold; }
+        .Z2 { background-color: #a0ffb4; color: black; font-weight: bold; }
+        .Z3 { background-color: #fff066; color: black; font-weight: bold; }
+        .Z4 { background-color: #ffaa66; color: black; font-weight: bold; }
+        .Z5 { background-color: #ff6666; color: white; font-weight: bold; }
+        .disconnected { opacity: 0.4; }
+        button { padding: 8px 12px; font-size: 16px; cursor: pointer; background-color: #444; color: white; border: none; border-radius: 4px; }
+        button:hover { background-color: #666; }
+    </style>
+</head>
+<body>
+    <h1>Live Runner Dashboard</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Runner Name</th>
+                <th>Heart Rate</th>
+                <th>Zone</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="runner-table-body">
+        </tbody>
+    </table>
+
+    <script>
+        function getZoneInfo(hr, zones) {
+            if (hr <= zones[0]) return "Z1";
+            if (hr <= zones[1]) return "Z2";
+            if (hr <= zones[2]) return "Z3";
+            if (hr <= zones[3]) return "Z4";
+            return "Z5";
+        }
+
+        async function editZones(deviceId, currentZones) {
+            let input = prompt(`Update zone limits for ${deviceId}.\nEnter 4 numbers separated by commas (Z1, Z2, Z3, Z4):`, currentZones);
+            
+            if (!input) return; 
+
+            let newZones = input.split(',').map(n => parseInt(n.trim()));
+            
+            // Validate they actually entered 4 valid numbers
+            if (newZones.length !== 4 || newZones.some(isNaN)) {
+                alert("Invalid input. You must enter exactly 4 numbers separated by commas.");
+                return;
+            }
+
+            // STRICT CHECK: Ensure numbers are going from lowest to highest
+            if (newZones[0] >= newZones[1] || newZones[1] >= newZones[2] || newZones[2] >= newZones[3]) {
+                alert("Error: Zones must be in order from lowest to highest. You cannot have a higher zone be a smaller number.");
+                return;
+            }
+
+            await fetch('/api/update_zones', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ device_id: deviceId, zones: newZones })
+            });
+        }
+
+        async function fetchData() {
+            try {
+                let response = await fetch('/api/get_runners');
+                let data = await response.json();
+                
+                let tableBody = document.getElementById('runner-table-body');
+                tableBody.innerHTML = ''; 
+                
+                let currentTime = Math.floor(Date.now() / 1000);
+
+                for (const [deviceId, stats] of Object.entries(data)) {
+                    let hr = stats.heart_rate;
+                    let isDisconnected = (currentTime - stats.timestamp) > 5;
+                    
+                    let zoneClass = isDisconnected ? "" : getZoneInfo(hr, stats.zones);
+                    let displayZone = isDisconnected ? "Offline" : zoneClass;
+                    let rowClass = isDisconnected ? "disconnected" : "";
+                    
+                    let row = `<tr class="${rowClass}">
+                        <td>${stats.name}</td>
+                        <td>${hr} BPM</td>
+                        <td class="${zoneClass}">${displayZone}</td>
+                        <td><button onclick="editZones('${deviceId}', '${stats.zones}')">Edit Zones</button></td>
+                    </tr>`;
+                    tableBody.innerHTML += row;
+                }
+            } catch (error) {
+                console.error("Error fetching data:", error);
+            }
+        }
+
+        setInterval(fetchData, 1000);
+        fetchData();
+    </script>
+</body>
+</html>
