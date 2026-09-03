@@ -1,2 +1,2 @@
-# StrideIQ
+# SpeedQ 
 Running tracker app
